@@ -1,2 +1,4 @@
-# planner-agent
-PMCR-O planner-agent marketplace agent repository
+# Planner Agent
+
+Canonical plugin: `planner`.
+Human handle: `@planner-agent`.
