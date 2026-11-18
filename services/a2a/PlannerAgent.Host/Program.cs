@@ -5,17 +5,16 @@ using Microsoft.Extensions.AI;
 
 const string AgentName = "planner-agent";
 const string A2APath = "/a2a/planner";
-
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddKeyedSingleton<AIAgent>(AgentName, (services, _) =>
     new ChatClientAgent(
-        new TransportProofChatClient(),
+        new CorrelationProofChatClient(),
         instructions:
-            "You are the PMCR-O Planner transport proof. " +
-            "Do not claim planner execution. Return the deterministic provider disposition.",
+            "You are the PMCR-O Planner transport/correlation proof. " +
+            "Do not claim role execution. Preserve any PMCR-O correlation envelope exactly.",
         name: AgentName,
-        description: "Produces bounded plans and observable acceptance criteria without performing Make work. CI transport proof uses a non-executing deterministic provider.",
+        description: "Produces bounded plans and observable acceptance criteria without performing Make work.",
         services: services));
 
 builder.AddA2AServer(AgentName);
@@ -39,7 +38,7 @@ app.MapWellKnownAgentCard(new AgentCard
 {
     Name = "PMCR-O Planner Agent",
     Description = "Produces bounded plans and observable acceptance criteria without performing Make work.",
-    Version = "1.0.0",
+    Version = "1.1.0",
     DefaultInputModes = ["text"],
     DefaultOutputModes = ["text"],
     SupportedInterfaces =
@@ -55,11 +54,11 @@ app.MapWellKnownAgentCard(new AgentCard
 
 app.Run();
 
-internal sealed class TransportProofChatClient : IChatClient
+internal sealed class CorrelationProofChatClient : IChatClient
 {
+    private const string CorrelationPrefix = "PMCRO_CORRELATION ";
     private const string Disposition =
-        "NOT_INVOKED: A2A transport reached planner-agent; " +
-        "the real PMCR-O Planner reasoning/provider is not connected in this CI proof.";
+        "NOT_INVOKED: A2A transport reached planner-agent; the real PMCR-O Planner reasoning/provider is not connected in this CI proof.";
 
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -67,7 +66,8 @@ internal sealed class TransportProofChatClient : IChatClient
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, Disposition)));
+        var text = BuildDisposition(messages);
+        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, text)));
     }
 
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
@@ -77,7 +77,18 @@ internal sealed class TransportProofChatClient : IChatClient
     {
         cancellationToken.ThrowIfCancellationRequested();
         await Task.Yield();
-        yield return new ChatResponseUpdate(ChatRole.Assistant, Disposition);
+        yield return new ChatResponseUpdate(ChatRole.Assistant, BuildDisposition(messages));
+    }
+
+    private static string BuildDisposition(IEnumerable<ChatMessage> messages)
+    {
+        var correlation = messages
+            .Select(message => message.Text)
+            .LastOrDefault(text => text.StartsWith(CorrelationPrefix, StringComparison.Ordinal));
+
+        return correlation is null
+            ? Disposition
+            : Disposition + " " + correlation;
     }
 
     public object? GetService(Type serviceType, object? serviceKey = null) =>
