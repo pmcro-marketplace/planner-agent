@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Plan bounded work from an admitted PMCR-O intent using validated resources and observable acceptance criteria.
+description: Plan bounded work from an admitted PMCR-O intent using validated resources and observable acceptance criteria. USE FOR turning an admitted intent into the smallest executable plan with checkable acceptance criteria. DO NOT USE FOR goal routing, artifact creation, verification, or reflection; use orchestrate, make, check, or reflect.
 ---
 # plan
 
@@ -33,4 +33,4 @@ A PASS requires actual evidence. An emitted invocation, route, plan, or declared
 Emission is not invocation. The installed Hook Agent may surround this role but does not replace its business function.
 
 ## Resources
-See `references/contract.md` and `assets/request.json`.
+See `references/contract.md`, `assets/request.json`, and `scripts/validate.py`.
