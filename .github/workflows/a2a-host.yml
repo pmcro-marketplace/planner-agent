@@ -1,0 +1,57 @@
+name: Planner A2A Host Proof
+
+on:
+  push:
+    branches: ["claude/a2a-service-host"]
+  pull_request:
+    paths:
+      - "services/a2a/**"
+      - ".github/workflows/a2a-host.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  a2a-host-proof:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet build services/a2a/PlannerAgent.Host/PlannerAgent.Host.csproj --configuration Release --nologo
+      - run: dotnet build services/a2a/PlannerAgent.Probe/PlannerAgent.Probe.csproj --configuration Release --nologo
+      - name: Start Planner A2A host
+        env:
+          ASPNETCORE_URLS: http://127.0.0.1:5092
+          A2A_PUBLIC_BASE_URL: http://127.0.0.1:5092
+        run: |
+          dotnet run --project services/a2a/PlannerAgent.Host/PlannerAgent.Host.csproj --configuration Release --no-build > /tmp/role-a2a.log 2>&1 &
+          echo $! > /tmp/role-a2a.pid
+      - name: Wait for host health
+        run: |
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5092/healthz > /tmp/health.json; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/role-a2a.log
+          exit 1
+      - name: Verify agent card
+        run: |
+          curl --fail --silent http://127.0.0.1:5092/.well-known/agent-card.json | tee /tmp/agent-card.json
+          python3 - <<'PY'
+          import json
+          card=json.load(open('/tmp/agent-card.json'))
+          assert card['name'] == 'PMCR-O Planner Agent'
+          print('PASS agent-card discovery')
+          PY
+      - name: Invoke through official A2A client
+        run: dotnet run --project services/a2a/PlannerAgent.Probe/PlannerAgent.Probe.csproj --configuration Release --no-build -- http://127.0.0.1:5092
+      - name: Stop host
+        if: always()
+        run: |
+          test ! -f /tmp/role-a2a.pid || kill "$(cat /tmp/role-a2a.pid)" || true
+          cat /tmp/role-a2a.log || true
